@@ -4,7 +4,7 @@
   "description": "AI-powered interview practice application",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd server && npm start",
+    "server": "cd server && npm run dev",
     "client": "cd client && npm run dev",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "test": "concurrently \"npm run test:server\" \"npm run test:client\"",

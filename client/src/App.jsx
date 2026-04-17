@@ -18,6 +18,10 @@ function App() {
   useEffect(() => {
     if (sessionState !== 'ended') return;
 
+    console.log('Session ended. Transcription:', transcription); // Debug log
+    console.log('Transcription length:', transcription.length); // Debug log
+    console.log('Transcription trimmed:', transcription.trim()); // Debug log
+
     if (!transcription.trim()) {
       // Req 4.7: no speech detected — don't call the analyzer
       setNoSpeech(true);
@@ -50,8 +54,14 @@ function App() {
   }, [sessionState]);
 
   async function handleGenerateQuestion() {
+    // Reset everything when generating a new question
+    setSessionState('idle');
+    setTranscription('');
+    setFeedback(null);
+    setNoSpeech(false);
     setIsLoadingQuestion(true);
     setError(null);
+    
     try {
       const res = await fetch('/api/question', {
         method: 'POST',

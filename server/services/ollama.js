@@ -4,7 +4,7 @@
  */
 
 const OLLAMA_URL = 'http://localhost:11434/api/generate'
-const MODEL = 'llama3.2' // or 'mistral', 'llama3', etc.
+const MODEL = 'llama3.2:1b' // Using 1B model for faster generation
 
 /**
  * Generates a single behavioral interview question for the given category.
@@ -12,7 +12,7 @@ const MODEL = 'llama3.2' // or 'mistral', 'llama3', etc.
  * @returns {Promise<string>} The generated question text
  */
 export async function generateQuestion(category = 'behavioral') {
-  const prompt = `You are an interview coach helping college students and entry-level candidates practice behavioral interviews. Generate exactly one behavioral interview question from the following category: ${category}. Return only the question text, no preamble or explanation.`
+  const prompt = `Generate one ${category} interview question for entry-level candidates. Question only:`
 
   const response = await fetch(OLLAMA_URL, {
     method: 'POST',
@@ -23,7 +23,8 @@ export async function generateQuestion(category = 'behavioral') {
       stream: false,
       options: {
         temperature: 0.8,
-        num_predict: 100,
+        num_predict: 50,
+        num_ctx: 512,
       },
     }),
   })
@@ -55,30 +56,48 @@ export async function generateQuestion(category = 'behavioral') {
  * @property {string[]} actionableTips
  */
 export async function analyzeResponse(question, transcription) {
-  const prompt = `You are an encouraging interview coach. Analyze the following interview response using the STAR framework (Situation, Task, Action, Result).
+  const prompt = `You are an expert interview coach. Analyze this behavioral interview response using the STAR framework.
 
 Question: ${question}
 
-Response: ${transcription}
+Candidate's Response: ${transcription}
 
-Return ONLY a JSON object with these exact fields:
-- starAnalysis: object with boolean fields situation, task, action, result
-- strengths: array of strings (1-3 specific things done well)
-- areasForImprovement: array of strings (1-3 specific gaps or weaknesses)
-- actionableTips: array of exactly 2-3 concrete, actionable suggestions
+Provide detailed, constructive feedback in JSON format:
 
-Use an encouraging, supportive tone. Return ONLY the JSON, no markdown formatting or explanation.`
+{
+  "starAnalysis": {
+    "situation": true/false (Did they describe the context/background?),
+    "task": true/false (Did they explain their responsibility/goal?),
+    "action": true/false (Did they detail specific actions they took?),
+    "result": true/false (Did they share measurable outcomes/impact?)
+  },
+  "strengths": [
+    "List 2-3 specific things they did well",
+    "Be encouraging and specific"
+  ],
+  "areasForImprovement": [
+    "List 2-3 specific gaps or areas to strengthen",
+    "Focus on what's missing from STAR"
+  ],
+  "actionableTips": [
+    "Provide 2-3 concrete, specific suggestions",
+    "Make them immediately actionable for next time"
+  ]
+}
+
+Return ONLY valid JSON, no markdown or explanation.`
 
   const response = await fetch(OLLAMA_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: MODEL,
+      model: 'llama3.2:latest', // Use larger 3.2B model for better analysis
       prompt: prompt,
       stream: false,
       options: {
-        temperature: 0.5,
-        num_predict: 500,
+        temperature: 0.4,
+        num_predict: 1000,
+        num_ctx: 4096,
       },
     }),
   })
@@ -95,7 +114,14 @@ Use an encouraging, supportive tone. Return ONLY the JSON, no markdown formattin
   }
 
   // Strip markdown code fences if present
-  const jsonText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+  let jsonText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+  
+  // Fix incomplete JSON by adding missing closing braces
+  const openBraces = (jsonText.match(/{/g) || []).length
+  const closeBraces = (jsonText.match(/}/g) || []).length
+  if (openBraces > closeBraces) {
+    jsonText += '}'.repeat(openBraces - closeBraces)
+  }
 
   let feedback
   try {
@@ -103,6 +129,12 @@ Use an encouraging, supportive tone. Return ONLY the JSON, no markdown formattin
   } catch (err) {
     throw new Error(`Ollama returned malformed JSON: ${err.message}. Raw response: ${rawText}`)
   }
+
+  // Ensure all required fields exist with defaults
+  feedback.starAnalysis = feedback.starAnalysis || { situation: false, task: false, action: false, result: false }
+  feedback.strengths = feedback.strengths || []
+  feedback.areasForImprovement = feedback.areasForImprovement || []
+  feedback.actionableTips = feedback.actionableTips || []
 
   return feedback
 }

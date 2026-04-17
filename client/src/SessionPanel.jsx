@@ -42,12 +42,18 @@ function SessionPanel({
   const wsRef = useRef(null); // Will store SpeechRecognition instance
   const streamRef = useRef(null);
   const intervalRef = useRef(null);
+  const isActiveRef = useRef(false); // Track active state in ref to avoid stale closure
 
   // Reset elapsed time when session becomes idle
   useEffect(() => {
     if (sessionState === 'idle') {
       setElapsedSeconds(0);
       setMicError(null);
+      isActiveRef.current = false;
+    } else if (sessionState === 'active') {
+      isActiveRef.current = true;
+    } else if (sessionState === 'ended') {
+      isActiveRef.current = false;
     }
   }, [sessionState]);
 
@@ -90,6 +96,8 @@ function SessionPanel({
       const lastResultIndex = event.results.length - 1;
       const transcript = event.results[lastResultIndex][0].transcript;
       
+      console.log('Speech recognized:', transcript); // Debug log
+      
       if (transcript && onTranscriptUpdate) {
         onTranscriptUpdate(transcript + ' ');
       }
@@ -104,9 +112,15 @@ function SessionPanel({
     };
 
     recognition.onend = () => {
+      console.log('Recognition ended, isActive:', isActiveRef.current); // Debug log
       // If session is still active, restart recognition (it stops after ~60s of silence)
-      if (sessionState === 'active' && wsRef.current === recognition) {
-        recognition.start();
+      if (isActiveRef.current && wsRef.current === recognition) {
+        console.log('Restarting recognition...'); // Debug log
+        try {
+          recognition.start();
+        } catch (err) {
+          console.error('Failed to restart recognition:', err);
+        }
       }
     };
 
@@ -131,6 +145,9 @@ function SessionPanel({
   }
 
   function stopSession() {
+    // Mark as inactive first to prevent restart
+    isActiveRef.current = false;
+    
     // Clear the timer
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -153,8 +170,11 @@ function SessionPanel({
       streamRef.current = null;
     }
 
-    // Notify App that session has ended (updates sessionState to 'ended')
-    onStopSession();
+    // Wait a bit for final speech results to come through before ending session
+    setTimeout(() => {
+      // Notify App that session has ended (updates sessionState to 'ended')
+      onStopSession();
+    }, 500); // 500ms delay to allow final transcription
   }
 
   function handleStop() {
