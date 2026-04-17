@@ -308,4 +308,4 @@ This project was built using spec-driven development. See `.kiro/specs/interview
 - Uses [llama3.2](https://ollama.ai/library/llama3.2) by Meta
 - Transcription powered by Web Speech API
 - Workshop w/ AWS
-- Bult with Kiro
+- Built with Kiro
